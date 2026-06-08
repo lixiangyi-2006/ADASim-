@@ -202,6 +202,10 @@ def control_loop():
             while '\n' in buffer:
                 line, buffer = buffer.split('\n', 1)
                 if not line.strip(): continue
+                if line.strip() == '{"type":"PING"}':
+                    client.sendall(b'{"type":"PONG"}\n')
+                    logger.debug("Responded PONG")
+                    continue
                 
                 try:
                     msg = json.loads(line)
