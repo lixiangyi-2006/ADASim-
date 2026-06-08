@@ -484,9 +484,7 @@ void MainWindow::onVehicleDataUpdated(double x, double y, double yaw,double dt)
     } 
     // 【模式 2】：运动学闭环控制算法 (MPC / PID)
     else {
-        // 经典的自行车运动学模型 (Bicycle Kinematic Model)
-        double dt = 0.1; // 10Hz 触发频率
-        
+        // 经典的自行车运动学模型 (Bicycle Kinematic Model）
         // 1. 根据当前速度、轴距和前轮转角，计算偏航角速率 (Yaw Rate)
         double yawRate = (currentSpeed_ / WHEELBASE) * std::tan(currentSteering_);
         lastEgoYaw_ += yawRate * dt; 
