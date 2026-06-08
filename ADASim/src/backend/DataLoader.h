@@ -8,12 +8,14 @@
  * 1. 线程隔离：本类设计为在独立的 Backend 子线程中运行，绝不允许任何阻塞 GUI 主线程的操作。
  * 2. 内存管理清理：彻底移除了早期废弃的 SQLite (QSqlDatabase) 残留变量，保持类的轻量化与职责单一。
  * 3. 滚动沙盒模式 (Rolling Window Replay Buffer)：抛弃了固定长度的旧模式，
- * 采用“无限向前的真实物理时间 + 定长(100帧)的 FIFO 历史队列”实现行车记录仪级别的回溯功能。
+ * 采用“无限向前的真实物理时间 + 定长(100帧)的环形队列”实现行车记录仪级别的回溯功能。
  * 4. 智能时间分流：通过引入 `replayCursor_` 实现了“未来生成模式”与“历史回放模式”的无缝安全切换。
  */
 
 #ifndef DATALOADER_H
 #define DATALOADER_H
+
+#include "RingBuffer.h"
 
 #include <QObject>
 #include <QVector>
@@ -102,7 +104,7 @@ private:
     // ==========================================
     // [底层状态维护区]
     // ==========================================
-    QVector<FrameState> historyQueue_;  ///< 记录最近 100 帧状态的 FIFO 滚动缓冲区 (Rolling Window)
+    RingBuffer<FrameState> historyQueue_;  ///< 记录最近 100 帧状态的 FIFO 滚动缓冲区 (Rolling Window)
     double liveSandboxX_ = 0.0;         ///< 记录沙盒模式下无限向前的真实物理世界 X 坐标
     
     /**
