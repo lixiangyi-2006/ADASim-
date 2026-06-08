@@ -11,11 +11,13 @@
  */
 
 #include "DataLoader.h"
+#include "RingBuffer.h"
 #include "common/Logger.h" // 接入 ADASim 统一日志系统
 
 #include <QThread>
 #include <QDebug>
 
+constexpr double REPLAY_DT=0.1;
 // ============================================================================
 // [构造与析构]
 // ============================================================================
@@ -25,6 +27,7 @@ DataLoader::DataLoader(const QString& dataPath, QObject *parent)
     , replayCursor_(-1)  // 初始化为 -1，代表当前处于生成最新帧的现实时间线
     , isRunning_(false)
     , timer_(new QTimer(this))
+    , historyQueue_(100)
 {
     lastTimestamp_=std::chrono::steady_clock::now();
     // 【多线程安全基石】：注册自定义的泛型容器，允许它们在子线程与主线程之间安全排队传递
@@ -53,7 +56,7 @@ void DataLoader::start()
         return;
     }
 
-    // 💡【核心修复】：这里不再清空 historyQueue_ 和坐标，使得 start 具备“继续 (Resume)”功能。
+    // 这里不再清空 historyQueue_ 和坐标，使得 start 具备“继续 (Resume)”功能。
     // 如果用户是从暂停状态、或者拖拽进度条后点击“开始”，将顺滑地接着播放。
 
     if (!isRunning_) {
@@ -89,7 +92,7 @@ void DataLoader::stop()
         timer_->stop();
     }
     
-    // 💡【重置逻辑归位】：真正需要“从头开始”时，用户必须点击停止。这里负责彻底清空内存状态。
+    // 【重置逻辑归位】：真正需要“从头开始”时，用户必须点击停止。这里负责彻底清空内存状态。
     historyQueue_.clear();
     liveSandboxX_ = 0.0;
     replayCursor_ = -1;
@@ -146,19 +149,14 @@ void DataLoader::loadNextFrame()
         
         FrameState state = {liveSandboxX_, 0.0, 0.0};
         
-        // 2. 将最新产生的一帧状态存入“行车记录仪”缓存尾部
-        historyQueue_.append(state);
+        // 2. 在环形缓冲区中写入数据，当缓冲区满时自动覆盖最旧的元素，不需要手动删除。
+        historyQueue_.push(state);
 
-        // 3. 严格限制内存消耗：FIFO (先进先出) 滚动剔除老旧数据，维持最近 100 帧
-        if (historyQueue_.size() > 100) {
-            historyQueue_.pop_front();
-        }
-
-        // 4. 将最新状态分发出去
+        // 3. 将最新状态分发出去
         emit vehiclePositionReady(state.x, state.y, state.yaw,dt);
         emit pointCloudReady(QVector<QPointF>());
 
-        // 5. 动态扩展前端进度条的上限边界，并迫使滑块永远顶在最右侧
+        // 4. 动态扩展前端进度条的上限边界，并迫使滑块永远顶在最右侧
         emit totalFramesLoaded(historyQueue_.size());
         emit currentFrameUpdated(historyQueue_.size() - 1); 
     }
