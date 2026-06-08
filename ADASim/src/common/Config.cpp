@@ -102,4 +102,14 @@ void Config::set(const QString& key, const QVariant& value)
     // 确保如 TCP Socket 接收到远端调参指令时，能安全地写入配置字典而不破坏内存结构。
     QWriteLocker locker(&lock_);
     config_[key] = value;
+     // 【拓展功能接口】：动态调参反馈
+    // 未来如果需要在配置被修改后，立刻通知全系统（如动态更改了"安全距离"，雷达圈立刻变大），
+    // 可以在此发射一个配置更新的全局信号： emit configUpdated(key, value);
 }
+// 【拓展功能接口】：持久化保存
+// void Config::save(const QString& filename) 
+// {
+//     // TODO: 利用 QWriteLocker 将 config_ (QVariantMap) 转换回 QJsonObject，
+//     // 再序列化为 QJsonDocument 并写回本地硬盘，实现“修改后保存重启不丢失”的功能。
+// }
+
