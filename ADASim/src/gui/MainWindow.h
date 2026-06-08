@@ -95,7 +95,7 @@ private slots:
     void onClientConnected(const QHostAddress& address);
     void onClientDisconnected(const QHostAddress& address);
     void onAlgorithmStatusReceived(const QString& status); // 接收算法端的运行状态 (如：Lattice 避障中)
-    
+    void updatePerformanceStats();
 private:
     // ==========================================
     // [UI 构建子程序]
@@ -108,6 +108,11 @@ private:
     
     void createInfoCard(QLayout* layout, const QString& title, const QString& value, const QString& objectName);
     QFrame* createAlgoPanel();
+    QLabel* cpuLabel_;
+    QLabel* memLabel_;
+    QLabel* threadLabel_;
+    unsigned long long prevTotal_;
+    unsigned long long prevIdle_;
     
     // ==========================================
     // [后端生命周期管理]
@@ -161,7 +166,7 @@ private:
     
     // ==========================================
     // [内置简易物理引擎状态区]
-    // 💡【拓展功能接口】：随着自动驾驶模型的复杂化，此处关于 offset, speed, yaw 
+    // 【拓展功能接口】：随着自动驾驶模型的复杂化，此处关于 offset, speed, yaw 
     // 的计算逻辑应剥离成一个独立的 VehicleDynamics 类，支持轮胎侧滑角等高级计算。
     // ==========================================
     
