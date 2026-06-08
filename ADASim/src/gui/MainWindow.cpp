@@ -314,10 +314,6 @@ void MainWindow::updatePerformanceStats()
     prevTotal_ = total;
     prevIdle_ = idleAll;
     cpuLabel_->setText(QString("CPU: %1%").arg(cpu, 0, 'f', 1));
-    // 调试：打印标签文本
-    qDebug() << "CPU Label text:" << cpuLabel_->text();
-    // 强制刷新状态栏
-    statusBar()->repaint();
     
     // 2. 读取内存 RSS
     QFile statmFile("/proc/self/statm");
@@ -330,8 +326,6 @@ void MainWindow::updatePerformanceStats()
             long pageSize = sysconf(_SC_PAGESIZE);
             double rssMB = (rssPages * pageSize) / (1024.0 * 1024.0);
             memLabel_->setText(QString("Mem: %1 MB").arg(rssMB, 0, 'f', 1));
-            qDebug() << "Mem Label text:" << memLabel_->text();
-            statusBar()->repaint();
         }
     }
 
@@ -345,8 +339,6 @@ void MainWindow::updatePerformanceStats()
                 if (parts.size() >= 2) {
                     int threads = parts[1].toInt();
                     threadLabel_->setText(QString("Threads: %1").arg(threads));
-                    qDebug() << "Thread Label text:" << threadLabel_->text();
-                    statusBar()->repaint();
                 }
                 break;
             }
