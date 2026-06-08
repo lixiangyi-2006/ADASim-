@@ -34,6 +34,10 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <cmath>
+#include <QFile>
+#include <QDebug>
+#include <QTimer>
+#include <unistd.h>
 
 // ============================================================================
 // [构造与析构]
@@ -43,6 +47,8 @@ MainWindow::MainWindow(const QString& configPath, const QString& dataPath, QWidg
     : QMainWindow(parent)
     , configPath_(configPath)
     , dataPath_(dataPath)
+    , prevTotal_(0)
+    , prevIdle_(0)
 {
     setWindowTitle("ADASim - 自动驾驶算法仿真平台 v1.0.0");
     resize(1600, 900);
@@ -133,7 +139,7 @@ void MainWindow::setupUI()
     consolePanel->setStyleSheet("QFrame { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; }");
     
     QVBoxLayout* consoleLayout = new QVBoxLayout(consolePanel);
-    QLabel* consoleTitle = new QLabel("📊 实时数据总线监控");
+    QLabel* consoleTitle = new QLabel("实时数据总线监控");
     consoleTitle->setStyleSheet("color: #58a6ff; font-size: 14px; font-weight: bold;");
     consoleLayout->addWidget(consoleTitle);
     
@@ -149,7 +155,7 @@ void MainWindow::setupUI()
     QHBoxLayout* playLayout = new QHBoxLayout(playbackWidget);
     playLayout->setContentsMargins(10, 5, 10, 5);
 
-    QLabel* titleLabel = new QLabel("⏪ 时光回放缓存区：", this);
+    QLabel* titleLabel = new QLabel("时光回放缓存区：", this);
     titleLabel->setStyleSheet("color: #8b949e; font-weight: bold;");
     playLayout->addWidget(titleLabel);
 
@@ -266,8 +272,87 @@ void MainWindow::setupStatusBar()
 {
     QStatusBar* statusBar = this->statusBar();
     statusBar->showMessage("ADASim 引擎就绪");
+    cpuLabel_ = new QLabel("CPU: --%");
+    cpuLabel_->setStyleSheet("color: #00ff88; background: transparent;");
+    statusBar->addPermanentWidget(cpuLabel_);
+    memLabel_ = new QLabel("Mem: --MB");
+    memLabel_->setStyleSheet("color: #00ff88; background: transparent;");
+    statusBar->addPermanentWidget(memLabel_);
+    threadLabel_ = new QLabel("Threads: --");
+    threadLabel_->setStyleSheet("color: #00ff88; background: transparent;");
+    statusBar->addPermanentWidget(threadLabel_);
     connLabel_ = new QLabel("外部算法节点：0");
     statusBar->addPermanentWidget(connLabel_);
+}
+void MainWindow::updatePerformanceStats()
+{
+    LOG_DEBUG("updatePerformanceStats called");
+    // 1. 读取 /proc/stat 第一行
+    QFile statFile("/proc/stat");
+    if (!statFile.open(QIODevice::ReadOnly)) return;
+    QString line = statFile.readLine();
+    statFile.close();
+    QStringList parts = line.split(' ', Qt::SkipEmptyParts);
+    if (parts.size() < 5) return;
+    // parts[1] user, parts[2] nice, parts[3] system, parts[4] idle, parts[5] iowait
+    
+    unsigned long long user = parts[1].toULongLong();
+    unsigned long long nice = parts[2].toULongLong();
+    unsigned long long system = parts[3].toULongLong();
+    unsigned long long idle = parts[4].toULongLong();
+    unsigned long long iowait = parts.size() > 5 ? parts[5].toULongLong() : 0;
+    unsigned long long total = user + nice + system + idle + iowait;
+    unsigned long long idleAll = idle + iowait;
+    double cpu = 0.0;
+    
+    if (prevTotal_ != 0) {
+        unsigned long long totalDelta = total - prevTotal_;
+        unsigned long long idleDelta = idleAll - prevIdle_;
+        cpu = (totalDelta - idleDelta) * 100.0 / totalDelta;
+    }
+    
+    prevTotal_ = total;
+    prevIdle_ = idleAll;
+    cpuLabel_->setText(QString("CPU: %1%").arg(cpu, 0, 'f', 1));
+    // 调试：打印标签文本
+    qDebug() << "CPU Label text:" << cpuLabel_->text();
+    // 强制刷新状态栏
+    statusBar()->repaint();
+    
+    // 2. 读取内存 RSS
+    QFile statmFile("/proc/self/statm");
+    if (statmFile.open(QIODevice::ReadOnly)) {
+        QString line = statmFile.readLine();
+        statmFile.close();
+        QStringList fields = line.split(' ');
+        if (fields.size() >= 2) {
+            long rssPages = fields[1].toLong();
+            long pageSize = sysconf(_SC_PAGESIZE);
+            double rssMB = (rssPages * pageSize) / (1024.0 * 1024.0);
+            memLabel_->setText(QString("Mem: %1 MB").arg(rssMB, 0, 'f', 1));
+            qDebug() << "Mem Label text:" << memLabel_->text();
+            statusBar()->repaint();
+        }
+    }
+
+    // 3. 读取线程数
+    QFile statusFile("/proc/self/status");
+    if (statusFile.open(QIODevice::ReadOnly)) {
+        while (!statusFile.atEnd()) {
+            QString line = statusFile.readLine();
+            if (line.startsWith("Threads:")) {
+                QStringList parts = line.split('\t', Qt::SkipEmptyParts);
+                if (parts.size() >= 2) {
+                    int threads = parts[1].toInt();
+                    threadLabel_->setText(QString("Threads: %1").arg(threads));
+                    qDebug() << "Thread Label text:" << threadLabel_->text();
+                    statusBar()->repaint();
+                }
+                break;
+            }
+        }
+        statusFile.close();
+    }
 }
 
 // ============================================================================
