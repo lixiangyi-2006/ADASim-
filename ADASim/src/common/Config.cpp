@@ -33,6 +33,19 @@ Config& Config::instance()
 // ============================================================================
 // [核心功能：加载配置文件]
 // ============================================================================
+static QVariantMap getDefaultConfig()
+{
+    QVariantMap defaults;
+    defaults["wheelbase"] = 2.8;
+    defaults["max_speed"] = 15.0;
+    defaults["max_steering"] = 0.5;
+    defaults["tcp_port"] = 8080;
+    defaults["udp_port"] = 8081;
+    defaults["lidar_range"] = 50.0;
+    defaults["cluster_tolerance"] = 0.5;
+    return defaults;
+}
+
 bool Config::load(const QString& filename)
 {
     QFile file(filename);
@@ -53,12 +66,16 @@ bool Config::load(const QString& filename)
         return false;
     }
     
-    // 💡【拓展功能接口】：如果需要对旧版本的配置进行兼容，或者合并默认配置，
-    // 可以在此处遍历 doc.object()，将缺失的键值对赋予默认值后再存入 config_。
-
+    // 如果需要对旧版本的配置进行兼容，或者合并默认配置，
+    QVariantMap defaultConfig = getDefaultConfig();
+    QVariantMap userConfig = doc.object().toVariantMap();
+    for (auto it = userConfig.begin(); it != userConfig.end(); ++it) {
+        defaultConfig[it.key()] = it.value();   // 用户配置覆盖默认
+    }
+    
     // 【线程安全层】：加写锁，独占锁定。此时阻止任何子模块（如传感器、算法）读取旧配置
     QWriteLocker locker(&lock_);
-    config_ = doc.object().toVariantMap();
+    config_ = defaultConfig;
     
     LOG_INFO("成功加载系统全局配置: %s", filename.toStdString().c_str());
     return true;
@@ -85,15 +102,4 @@ void Config::set(const QString& key, const QVariant& value)
     // 确保如 TCP Socket 接收到远端调参指令时，能安全地写入配置字典而不破坏内存结构。
     QWriteLocker locker(&lock_);
     config_[key] = value;
-    
-    // 💡【拓展功能接口】：动态调参反馈
-    // 未来如果需要在配置被修改后，立刻通知全系统（如动态更改了"安全距离"，雷达圈立刻变大），
-    // 可以在此发射一个配置更新的全局信号： emit configUpdated(key, value);
 }
-
-// 💡【拓展功能接口】：持久化保存 (开发中...)
-// void Config::save(const QString& filename) 
-// {
-//     // TODO: 利用 QWriteLocker 将 config_ (QVariantMap) 转换回 QJsonObject，
-//     // 再序列化为 QJsonDocument 并写回本地硬盘，实现“修改后保存重启不丢失”的功能。
-// }
