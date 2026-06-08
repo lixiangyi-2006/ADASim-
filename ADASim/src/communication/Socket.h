@@ -107,7 +107,8 @@ private slots:
      * @brief 【内存安全核心】统一处理客户端的断开事件
      * * 从 clients_ 列表中移除对应 socket，并调用 deleteLater() 交由事件循环安全回收内存。
      */
-    void onClientDisconnected();  
+    void onClientDisconnected(); 
+    void sendPing(QTcpSocket* client); 
     
 private:
     // ==========================================
@@ -117,8 +118,15 @@ private:
     
     QTcpServer* tcpServer_ = nullptr;    ///< TCP 监听守护句柄
     QUdpSocket* udpSocket_ = nullptr;    ///< UDP 数据收发句柄
-    
-    QList<QTcpSocket*> clients_;         ///< 活跃的客户端套接字对象池 (Connection Pool)
+    struct ClientInfo {
+        QTcpSocket* socket;
+        QTimer* heartbeatTimer;
+        int missedPongs;
+    };
+
+    QList<ClientInfo> clients_;   // 替换原来的 QList<QTcpSocket*> clients_
+    const int PING_INTERVAL_MS = 5000;   // 5秒发送一次 PING
+    const int MAX_MISSED_PONGS = 3;      // 连续3次无响应则断开
 };
 
 #endif // SOCKET_H
