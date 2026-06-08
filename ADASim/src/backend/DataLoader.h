@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <chrono>
 #include <cmath>
+#include <random>
 
 /**
  * @class DataLoader
@@ -121,7 +122,8 @@ private:
     QTimer* timer_;                     ///< 高频数据驱动核心定时器
     
     std::chrono::steady_clock::time_point lastTimestamp_; 
-    
+    std::default_random_engine rng_;
+    std::normal_distribution<double> noise_dist_; 
 };
 
 #endif // DATALOADER_H
