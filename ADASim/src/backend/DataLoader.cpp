@@ -16,8 +16,12 @@
 
 #include <QThread>
 #include <QDebug>
+#include <random>
 
 constexpr double REPLAY_DT=0.1;
+std::default_random_engine rng_;
+std::normal_distribution<double> noise_dist_;
+
 // ============================================================================
 // [构造与析构]
 // ============================================================================
@@ -28,6 +32,8 @@ DataLoader::DataLoader(const QString& dataPath, QObject *parent)
     , isRunning_(false)
     , timer_(new QTimer(this))
     , historyQueue_(100)
+    , noise_dist_(0.0, 0.05)   // 均值0，标准差0.05米
+    , rng_(std::chrono::steady_clock::now().time_since_epoch().count())
 {
     lastTimestamp_=std::chrono::steady_clock::now();
     // 【多线程安全基石】：注册自定义的泛型容器，允许它们在子线程与主线程之间安全排队传递
@@ -111,15 +117,40 @@ void DataLoader::stop()
 void DataLoader::loadNextFrame() 
 {
     if (!isRunning_) return;
-
-    // 【核心状态机：智能分流】
-    // 判断当前游标 replayCursor_ 是否合法且小于队列末尾，这意味着用户正在“回顾历史”
     
     auto now = std::chrono::steady_clock::now();
     double dt = std::chrono::duration<double>(now-lastTimestamp_).count();
     lastTimestamp_=now;
     LOG_DEBUG("dt= %f seconds",dt);
+
+    //生成原始点云
+    QVector<QPointF> points;
+    const int numPoints = 36;
+    const double radius = 10.0;
+    for (int i = 0; i < numPoints; ++i) {
+    double angle = i * 2 * M_PI / numPoints;
+    double x = radius * std::cos(angle);
+    double y = radius * std::sin(angle);
+    points.append(QPointF(x, y));
+    }
     
+    //添加高斯噪声:遍历每个点，加上随机偏移
+    for (auto& pt : points) {
+    double dx = noise_dist_(rng_);
+    double dy = noise_dist_(rng_);
+    pt.rx() += dx;
+    pt.ry() += dy;
+    }
+    
+    // 添加运动畸变（简化模型）
+    double speed = 5.0;   // 你需要从 MainWindow 获取，或者在这里定义一个常量 5.0
+    double distort = speed * 0.02;  // 经验系数
+    for (auto& pt : points) {
+    pt.rx() += distort;
+    }
+    
+    // 【核心状态机：智能分流】
+    // 判断当前游标 replayCursor_ 是否合法且小于队列末尾，这意味着用户正在“回顾历史”
     if (replayCursor_ >= 0 && replayCursor_ < historyQueue_.size() - 1) {
         
         // --------------------------------------------------------
@@ -157,7 +188,7 @@ void DataLoader::loadNextFrame()
         emit pointCloudReady(QVector<QPointF>());
 
         // 4. 动态扩展前端进度条的上限边界，并迫使滑块永远顶在最右侧
-        emit totalFramesLoaded(historyQueue_.size());
+        emit totalFramesLoaded(historyQueue_.size(points));
         emit currentFrameUpdated(historyQueue_.size() - 1); 
     }
 }
